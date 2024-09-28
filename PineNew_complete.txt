@@ -1,0 +1,392 @@
+//@version=5
+indicator("Heracles Indicator", overlay = true, max_bars_back = 5000, max_labels_count = 500)
+//==================================
+int waveLength = input(10,"waveLength")
+waveLength:=waveLength-1
+
+var bool pHigh = na
+int offset = na
+offset := int(math.min(waveLength - 1, last_bar_index - bar_index))
+float highestHigh = na
+float lowestLow = na
+highestHigh := ta.highest(high,waveLength)
+lowestLow := ta.lowest(low,waveLength)
+pHigh := high[offset]==highestHigh[offset] and high[offset]==highestHigh// and high==ta.pivothigh(high, 0,1)?true:false
+var bool pLow = na
+pLow := low[offset]==lowestLow and low[offset]==lowestLow[offset]//lowest(low,lb+rb)// and low==ta.pivotlow(low,0,1)?true:false //low==ta.lowest(low,4) and low == ta.pivotlow(low,5,0)// and low==ta.lowest(low, waveLength)[offset1]
+//------------------------------------------------------------------------------------------------------------
+
+var int cpl = 0
+var int bHigh = na
+var int bLow = na
+var int cpwh = 0
+var int cpwl = 0
+var int cph = 0
+// plot(cph, color=color.blue, linewidth=2, title="CPH")
+cph := pHigh[1] ? 1:cph[1] + 1
+cpl := pLow[1] ? 1 : cpl[1] + 1
+var bool wHigh = na
+var bool wLow = na
+wHigh := ((pHigh and not pLow) or ((pHigh and pLow and cpl < cph))) and (cph >= waveLength)?true:false
+wLow := ((pLow and not pHigh) or ((pLow and pHigh and cph < cpl))) and (cpl >= waveLength)?true:false
+
+// Initializing spHigh with the high of the first bar as a starting point
+var float spHigh = na
+spHigh := wLow[1] ? high[offset] : high[offset] > spHigh[1] ? high[offset] : spHigh[1]
+var float spHigh1 = na
+spHigh1 := wLow?high[offset]:high[offset]<high[offset+1]?high[offset]:high[offset+1]
+
+// Updating bHigh based on the conditions provided.
+bHigh := wHigh ? 0 : wLow[1] ? bar_index[offset] : high[offset] >= spHigh[1] ? bar_index[offset] : bHigh[1]// Initializing spLow with the low of the first bar as a starting point
+var float spLow = na
+// Conditional logic to update spLow
+spLow := wHigh[1] ? low[offset] : low[offset] < spLow[1] ? low[offset] : spLow[1]
+bLow := wLow ? 0 : wHigh[1] ? bar_index[offset] : low[offset] <= spLow[1] ? bar_index[offset] : bLow[1]
+int offs1 = int(offset)
+
+cpwh := wHigh[1] ? 1 : cpwh[1] + 1
+cpwl := wLow[1] ? 1 : cpwl[1] + 1
+//=============================================================================
+var int cnwh = na
+for i = 1 to 500
+    if wHigh[i]
+        cnwh := cpwh-i
+        break
+
+var int cnwl = na  //count wLow==true
+for j = 1 to 500
+    if wLow[j]
+        cnwl := j
+        break       
+//=============================Peak
+var int mwPeak = na
+var int mwValley = na
+if wLow
+    for i = 1  to 100
+        if bar_index[offset+i]==bHigh[1] and cpwl[i]<cpwh[i] and not wHigh[i] and not wLow[1]
+            mwPeak:=i
+            break
+        else 
+            mwPeak:=0
+if wHigh
+    for j = 1 to 100
+        if bar_index[offset+j]==bLow[1] and cpwh[j]<cpwl[j] and not wLow[j] and not wHigh[1]
+            mwValley:=j
+            break
+        else
+            mwValley:=0
+
+var bool mwHigh = na
+var bool mwLow = na
+if (not wHigh) and (cpwl < cpwh) and (bar_index[offset] == bHigh[1+cnwl])
+    mwHigh :=true
+else
+    mwHigh :=na
+if (na(wLow) or not wLow) and (cpwh < cpwl) and (bar_index[offset] == bLow[1+cnwh])
+    mwLow :=true
+else 
+    mwLow := na 
+
+var bool peak = na
+var bool valley = na
+
+peak:=wHigh and mwValley==0?true:false
+valley :=wLow and mwPeak==0?true:false
+
+var int cpp = na
+var int cpv = na
+// Update cpp based on the condition
+cpp := peak[1] ? 1 : cpp[1] + 1
+cpv := valley[1] ? 1 : cpv[1] + 1
+// Calculate previous highs and lows based on cpp and cpv offsets
+float prevHigh = high[cpp+offset]
+float prevLow = low[cpv+offset]
+// Calculate second previous highs and lows based on doubling the offsets (cpp and cpv)
+float prevHigh2 = prevHigh[cpp]
+float prevLow2 = prevLow[cpv]
+
+// initialize m1,m2
+var float m1 = na
+var float m2 = na
+m1:=peak?(high[offset]-prevHigh)/cpp:m1[1]
+m2:=valley?(low[offset]-prevLow)/cpv:m2[1]
+//-----init pp4, p4
+
+var bool pp4 = na
+var bool p4 = na
+
+pp4 := peak and (high[offset] < prevHigh) and (prevLow < prevLow2) and (high[offset] >= prevLow2) and (m1 < m2)
+if peak// and (bar_index< lastPeakBar)
+    if pp4 and not pp4[cpp] and not pp4[cpp+cpp[cpp]]
+        p4:= true
+        // label.new(bar_index[offset],high[offset], text=str.tostring(cpp))
+else
+    p4:=pp4
+
+
+var bool p5 = na
+var bool p3 = na
+var bool p2 = na
+var bool p1 = na
+var bool p1_1 = na
+var bool p2_1 = na
+var bool p3_1 = na
+var bool p5_1 = na
+
+// p5 := ()
+p5 :=(valley and p4[cpp])?true:false
+p3:=(p4 and valley[cpv])?true:false
+p2 := (p4 and peak[cpp])?true:false
+p1:=(p4 and valley[cpp+cpv[cpp]])?true:false
+    // Initialize ap5 with a starting value of 0
+var bool ap5 = false
+var float lp5 = na
+var bool pv4 = na
+if p5[cpv]
+    ap5:=true
+else 
+    ap5:=false      
+
+pv4 := (valley and (low[offset] > prevLow) and (prevHigh > prevHigh2) and (low[offset] <= prevHigh2) and (m1 < m2))
+// Function to safely access historical values with a check to avoid out-of-bounds access
+var bool v4 = na
+var bool v5 = na
+var bool v3 = na
+var bool v2 = na
+// Calculation
+if valley
+    if pv4 and not pv4[cpv] and not pv4[cpv + cpv[cpv]]
+        v4:=true
+else 
+    v4:=pv4
+
+
+var bool v1 = na
+// Calculate v4 based on available data and assuming cnv is correctly calculated
+v5 := (peak and v4[cpv]) ?true:false
+// v5_1 := valley and v4[cpv] and mwPeak>0 ? true : false
+v3 := (v4 and peak[cpp])?true:false
+v2 := (v4 and valley[cpv])?true:false
+v1 := (v4 and peak[cpp+cpv[cpp]])?true:false
+//------------===========================================================================================================================
+// Initialize av5 with a starting value of 0
+var int bullc = na
+var int bearc = na
+_isect(x1,y1,x2,y2,x3,y3,x4,y4)=>    
+	x     = ((x1*y2-y1*x2)*(x3-x4) - (x1-x2)*(x3*y4-y3*x4)) / ((x1-x2)*(y3-y4) - (y1-y2)*(x3-x4)) 
+	y     = ((x1*y2-y1*x2)*(y3-y4) - (y1-y2)*(x3*y4-y3*x4)) / ((x1-x2)*(y3-y4) - (y1-y2)*(x3-x4))
+	ylow  = math.min( math.max ( y1, y2 ) , math.max ( y3, y4 ) )
+	yhigh = math.max( math.min ( y1, y2 ) , math.min ( y3, y4 ) )
+	xlow  = math.min( math.max ( x1, x2 ) , math.max ( x3, x4 ) )
+	xhigh = math.max( math.min ( x1, x2 ) , math.min ( x3, x4 ) )
+	[x,y]
+bullc := p1?1:p2?2:p3?3:p4?3:p5?5:0
+bearc := v1?1:v2?2:v3?3:v4?3:v5?5:0
+
+var float labelHigh = na
+if ( bullc >0)
+    labelColor = color.orange
+    labelSize = 1
+    labelSize := peak ? 1 : 0
+    if p5
+        label.new(bar_index[offset],low[offset],style = label.style_label_up,text = str.tostring(bullc), color = labelColor)
+    if p4
+        label.new(bar_index[offset],high[offset],style=label.style_label_down, text="4", color = labelColor)
+        label.new(bar_index[cpv+offset],low[cpv+offset],style=label.style_label_up, text="3", color = labelColor)
+        label.new(bar_index[cpp+offset],high[cpp+offset],style=label.style_label_down, text="2", color = labelColor)
+        label.new(bar_index[cpv+cpv[cpv]+offset],low[cpv+cpv[cpv]+offset],style=label.style_label_up, text="1", color = labelColor)
+        
+if ( bearc > 0)
+    labelColor = color.rgb(243, 142, 230)
+    labelSize = 1
+    labelSize := peak ? 1 : 0
+    if v5 
+        label.new(bar_index[offset],high[offset],style=label.style_label_down, text="5", color = labelColor)
+    if v4
+        label.new(bar_index[offset],low[offset],style=label.style_label_up, text="4", color = labelColor)
+        label.new(bar_index[cpp+offset],high[cpp+offset],style=label.style_label_down, text="3", color = labelColor)
+        label.new(bar_index[cpv+offset],low[cpv+offset],style=label.style_label_up, text="2", color = labelColor)
+        label.new(bar_index[cpp+cpp[cpp]+offset],high[cpp+cpp[cpp]+offset],style=label.style_label_down, text="1", color = labelColor)
+   
+ //================Line===========   
+if p5 and p4[cpp]
+    [x3,y3] = _isect(cpp+cpp[cpp],high[cpp+cpp[cpp]+offset],cpp,high[cpp+offset],(cpv+cpv[cpv]),low[cpv+cpv[cpv]+offset],cpv,low[cpv+offset])
+    if math.abs(x3)<50
+        line.new(bar_index[cpp+cpp[cpp]+offset], high[cpp+cpp[cpp]+offset], bar_index[offset]-int(x3),y3, color = color.rgb(10, 198, 245))
+        line.new(bar_index[cpv+cpv[cpv]+offset], low[cpv+cpv[cpv]+offset], bar_index[offset]-int(x3),y3,color = color.rgb(23, 199, 253))
+    else 
+        [x31,y31] = _isect(cpp+cpp[cpp],high[cpp+cpp[cpp]+offset],cpp,high[cpp+offset],-50,high[offset],-50,low[offset])
+        line.new(bar_index[cpp+cpp[cpp]+offset], high[cpp+cpp[cpp]+offset], bar_index[offset]-int(x31),y31, color = color.rgb(10, 198, 245))
+        [x32,y32]=_isect(cpv+cpv[cpv],low[cpv+cpv[cpv]+offset],cpv,low[cpv+offset],-50,high[offset],-50,low[offset])
+        line.new(bar_index[cpv+cpv[cpv]+offset], low[cpv+cpv[cpv]+offset], bar_index[offset]-int(x32),y32, color = color.rgb(10, 198, 245))
+    line.new(bar_index[offset],low[offset],bar_index[offset]+50,low[offset],color = color.rgb(10, 198, 245))
+
+
+    //=====================
+//===================================================================
+var int cp1 = 0
+var int cp2 = 0
+var int cp5 = 0
+cp1:= p1?0:cp1[1]+1
+cp2 := p2?0 : cp2[1]+1
+cp5 := p5?0 : cp5[1]+1
+
+var float mp13 = na
+var float mp24 = na
+var float mp14 = na
+var float pl13 = na
+var float pl24 = na
+var float pl14 = na
+var float mp45 = na
+var float mp35 = na
+var float mp45_l = na
+var bool above24_l = na
+var bool below13_h = na
+var bool below13_l = na
+var bool above24_h = na
+var bool above24_v_part = na
+var bool above24_1 = na
+var bool below13_1 = na
+var bool above24_v_part_1 = na
+var float mp45_h = na
+var float mp35_h = na
+var float mp24_v = na
+var float mp13_v= na
+mp13:=p4[cpp]?(prevLow2-prevLow)/cpv[cpv]:na
+mp35:=p4[cpp]?(prevLow-low[offset])/cpv:na
+mp24:=p4[cpp]?(prevHigh2-prevHigh)/cpp[cpp]:na
+mp45 := p5?(prevHigh-low[offset])/cpp:na
+mp45_h := p5?(prevHigh-high[offset])/cpp:na
+mp35_h:=p5?(prevLow-high[offset])/cpv:na
+mp4n = (prevHigh-low[offset])/cpp
+mp4n_h = (prevHigh-high[offset])/cpp
+mp3n = (prevLow2-low[offset])/(cpv+cpv[cpv])
+mp3n_h = (prevLow2-high[offset])/(cpv+cpv[cpv])
+above24_l:= p5 and mp24>mp45?true:false
+above24_h :=p5 and mp24>mp45_h?true:false
+below13_h:=p5 and mp13<mp35_h?true:false
+below13_l:=p5 and mp13<mp35?true:false
+
+mp24_v:= p5[cpv]? (prevHigh2-prevHigh)/(cpp[cpp]):na
+mp13_v :=p5[cpv]?(low[cpv+cpv[cpv]+cpv[cpv+cpv[cpv]]]-prevHigh2)/(cpv[cpv+cpv[cpv]]):na
+var bool cross_bar = na
+
+cross_bar := (mp24_v<=mp4n and mp24_v>=mp4n_h)or(mp13_v<=mp3n and mp13_v >=mp3n_h)?true:false
+
+
+plotshape((p5 and below13_l and not below13_h)?bar_index:na,style=shape.triangleup, size = size.small,color= color.rgb(19, 255, 255), location=location.belowbar, offset = (2-waveLength))
+barcolor((p5 and below13_l and not below13_h)?color.rgb(12, 249, 241):na,offset = (2-waveLength))
+
+plotshape((p5 and above24_h and not above24_l)?bar_index:na,style=shape.triangleup, size = size.small,color= color.rgb(19, 255, 255), location=location.belowbar, offset = (2-waveLength))
+barcolor((p5 and above24_h and not above24_l)?color.rgb(12, 249, 241):na,offset = (2-waveLength))
+
+barcolor(p5 and below13_h?color.rgb(12, 249, 241):na, offset = (3-waveLength))
+plotshape((p5 and below13_h)?bar_index:na,style=shape.triangleup,size = size.small,color= color.rgb(19, 255, 255), location=location.belowbar, offset = (3-waveLength))
+var bool cross_flag = false
+if p5[cpv] and not above24_h[cpv] and not below13_l[cpv] and cross_bar
+    for i=1 to cpv
+        if cross_bar[i]
+            cross_flag:=false
+            break
+        else 
+            cross_flag:=true
+
+barcolor((p5[cpv] and not above24_h[cpv] and not below13_l[cpv] and cross_bar and cross_flag) ?color.rgb(12, 249, 241):na, offset = (1-waveLength))
+plotshape(p5[cpv] and not above24_h[cpv] and not below13_l[cpv] and cross_bar and cross_flag? bar_index:na,style=shape.triangleup,size = size.small,color= color.rgb(19, 255, 255), location=location.belowbar,offset = (1-waveLength))
+
+plotshape((p5 and above24_l)?bar_index:na,style=shape.triangleup, size = size.small,color= color.rgb(19, 255, 255), location=location.belowbar, offset = (3-waveLength))
+barcolor((p5 and above24_l)?color.rgb(12, 249, 241):na,offset = (3-waveLength))
+//============================================================================
+var int cv1 = 0
+var int cv2 = 0
+var int cv5 = 0
+cv1:= v1?0:cv1[1]+1
+cv2 := v2?0 : cv2[1]+1
+cv5 := v5?0 : cv5[1]+1
+
+var float mv13 = na
+var float mv24 = na
+var float mv14 = na
+var float vl13 = na
+var float vl24 = na
+var float vl14 = na
+var float mv35 = na
+var float mv35_h = na
+var float mv45 = na
+var float mv45_h = na
+var float mv13_v=na
+var float mv24_v = na
+var float mv3n = na
+var float mv3n_h = na
+var float mv4n = na
+var float mv4n_h = na
+// var float mv45_l=na
+
+mv13 :=v5?(prevHigh-prevHigh2)/cpp[cpp]:na
+mv35 :=v5?(low[offset]-prevHigh)/cpp:na
+mv35_h:= v5?(high[offset]-prevHigh)/cpp:na
+mv24 :=v5?(prevLow-prevLow2)/cpv[cpv]:na
+mv45_h :=v5? (high[offset]-prevLow)/cpv:na
+mv45 :=v5? (low[offset]-prevLow)/cpv:na
+
+mv13_v := v5[cpp]?(prevHigh2-high[offset+cpp+cpp[cpp]+cpp[cpp+cpp[cpp]]])/(cpp[cpp+cpp[cpp]]):na
+mv24_v := v5[cpp]?(prevLow-prevLow2)/(cpv[cpv]):na
+mv3n:=v5[cpp]?(low[offset]-prevHigh2)/(cpp+cpp[cpp]):na
+mv3n_h:=v5[cpp]?(high[offset]-prevHigh2)/(cpp+cpp[cpp]):na
+mv4n := v5[cpp]?(low[offset]-prevLow)/cpv:na
+mv4n_h := v5[cpp]?(high[offset]-prevLow)/cpv:na
+
+// mv45_l:=v5?(low[offset]-prevLow)/cpv:na
+
+var bool above13_h = na
+var bool above13_l = na
+var bool below24_h = na
+var bool below24_l = na
+var bool cross_bar_pink = na
+var bool cross_flag_pink = false
+int offset_v5 = na
+above13_h := v5 and mv13<mv35_h?true:false
+above13_l := v5 and mv13<mv35?true:false
+below24_h :=v5 and mv24>mv45_h?true:false
+below24_l:=v5 and mv24>mv45?true:false
+cross_bar_pink:= (mv24_v>=mv4n and mv24_v<=mv4n_h)or(mv13_v>=mv3n and mv13_v <=mv3n_h)?true:false
+if v5[cpp] and not above13_h[cpp] and not below24_l[cpp] and cross_bar_pink
+    for i=1 to cpp
+        if cross_bar_pink[i]
+            cross_flag_pink:=false
+            break
+        else 
+            cross_flag_pink:=true
+
+plotshape((v5 and below24_l and not below24_h)?bar_index:na,style=shape.triangledown, size = size.small,color= color.rgb(244, 21, 248), location=location.abovebar, offset = (2-waveLength))
+barcolor((v5 and below24_l and not below24_h)?color.rgb(244, 21, 248):na,offset = (2-waveLength))
+
+plotshape((v5 and above13_h and not above13_l)?bar_index:na,style=shape.triangledown, size = size.small,color= color.rgb(244, 21, 248), location=location.abovebar, offset = (2-waveLength))
+barcolor((v5 and above13_h and not above13_l)?color.rgb(244, 21, 248):na,offset = (2-waveLength))
+
+barcolor(v5 and below24_h?color.rgb(244, 21, 248):na, offset = (3-waveLength))
+plotshape((v5 and below24_h)?bar_index:na,style=shape.triangledown,size = size.small,color= color.rgb(244, 21, 248), location=location.abovebar, offset = (3-waveLength))
+
+plotshape((v5 and above13_l)?bar_index:na,style=shape.triangledown, size = size.small,color= color.rgb(244, 21, 248), location=location.abovebar, offset = (3-waveLength))
+barcolor((v5 and above13_l)?color.rgb(244, 21, 248):na,offset = (3-waveLength))
+
+barcolor((v5[cpp] and not above13_h[cpp] and not below24_l[cpp] and cross_bar_pink and cross_flag_pink) ?color.rgb(244, 21, 248):na, offset = (1-waveLength))
+plotshape(v5[cpp] and not above13_h[cpp] and not below24_l[cpp] and cross_bar_pink and cross_flag_pink? bar_index:na,style=shape.triangledown,size = size.small,color= color.rgb(244, 21, 248), location=location.abovebar,offset = (1-waveLength))
+
+//==============================================================================================================================================
+if v5
+    [x5,y5]=_isect(cpp+cpp[cpp],high[cpp+cpp[cpp]+offset],cpp,high[cpp+offset],(cpv+cpv[cpv]), low[cpv+cpv[cpv]+offset],cpv,low[cpv+offset])
+    // label.new(bar_index,low, text=str.tostring(x5))
+    if math.abs(x5) <50
+        // label.new(bar_index,low, text=str.tostring(x5))
+        line.new(bar_index[cpp+cpp[cpp]+offset], high[cpp+cpp[cpp]+offset], bar_index[offset]-int(x5),y5,color =color.rgb(231, 28, 180))
+        line.new(bar_index[cpv+cpv[cpv]+offset], low[cpv+cpv[cpv]+offset], bar_index[offset]-int(x5),y5,color = color.rgb(219, 39, 174))
+        line.new(bar_index[offset],high[offset],bar_index[offset]+50, high[offset],color = color.rgb(219, 39, 174))
+    else
+        [x6,y6] = _isect(cpv+cpv[cpv],low[cpv+cpv[cpv]+offset],cpv, low[cpv+offset],0,high[offset],-1,high[offset])
+        [x7,y7] = _isect(-50,high[offset],-50,low[offset],cpp+cpp[cpp],high[cpp+cpp[cpp]+offset],cpp,high[cpp+offset])
+        line.new(bar_index[cpp+cpp[cpp]+offset], high[cpp+cpp[cpp]+offset], bar_index[offset]-int(x7),y7,color =color.rgb(231, 28, 180))
+        [x8,y8] = _isect(-50,high[offset],-50,low[offset],cpv+cpv[cpv],low[cpv+cpv[cpv]+offset],cpv, low[cpv+offset])
+        line.new(bar_index[cpv+cpv[cpv]+offset], low[cpv+cpv[cpv]+offset], bar_index[offset]-int(x8),y8,color =color.rgb(231, 28, 180))
+        line.new(bar_index[offset],high[offset],bar_index[offset]+50, high[offset],color = color.rgb(219, 39, 174))
+
